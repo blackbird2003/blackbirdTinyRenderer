@@ -1,12 +1,9 @@
 #include <cmath>
+#include <cstdio>
 
 #include "tgaimage.h"
 #include "geometry.h"
 #include "model.h"
-
-const TGAColor white = TGAColor(255, 255, 255, 255);
-const TGAColor red = TGAColor(255, 0, 0, 255);
-const TGAColor blue = TGAColor(0, 0, 255, 255);
 
 //Bresenham
 //Reference: https://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm#C++
@@ -69,14 +66,46 @@ void drawSolidTriangle(Triangle2D<int> tri, TGAImage &image, TGAColor color) {
     }
 };
 
-int main(int argc, char** argv)
-{
-    TGAImage image(200, 200, TGAImage::RGB);
+Model *model = NULL;
+const int width  = 800;
+const int height = 800;
+const TGAColor black = TGAColor(0, 0, 0, 0);
+const TGAColor white = TGAColor(255, 255, 255, 255);
+const TGAColor red = TGAColor(255, 0, 0, 255);
+const TGAColor green = TGAColor(0, 255, 0, 255);
+const TGAColor blue = TGAColor(0, 0, 255, 255);
 
-    Triangle2D<int> tri((std::vector<Vec2<int>>) {Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160)});
-    drawSolidTriangle(tri, image, red);
+
+int main(int argc, char** argv) {
+    if (2==argc) {
+        model = new Model(argv[1]);
+    } else {
+        model = new Model("obj/african_head.obj");
+    }
+
+    TGAImage image(width, height, TGAImage::RGB);
+    Vec3f light_dir(0,0,-1);
+    int cnt = 0;
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec2i screen_coords[3];
+        Vec3f world_coords[3];
+        for (int j=0; j<3; j++) {
+            Vec3f v = model->vert(face[j]);
+            screen_coords[j] = Vec2i((v.x+1.)*width/2., (v.y+1.)*height/2.);
+            world_coords[j]  = v;
+        }
+        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
+        n.normalize();
+        float intensity = n*light_dir;
+        if (intensity>0) {
+            printf("ok %d\n", ++cnt);
+            drawSolidTriangle(Triangle2D<int>({screen_coords[0], screen_coords[1], screen_coords[2]}), image, TGAColor(intensity*255, intensity*255, intensity*255, 255));
+        }
+    }
 
     image.flip_vertically();
     image.write_tga_file("output.tga");
+    delete model;
     return 0;
 }

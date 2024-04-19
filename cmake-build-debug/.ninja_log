@@ -1,9 +1,21 @@
 # ninja log v5
-4	482	7352273906279240	CMakeFiles/tinyRender.dir/main.cpp.obj	9f4e30cea2909b14
-482	572	7352273907131927	tinyRender.exe	90472add3f0ab054
-0	516	7352195892424469	CMakeFiles/tinyRender.dir/tgaimage.cpp.obj	bd776e7a205d2018
-8	680	7352282072721491	CMakeFiles/tinyRender.dir/tgaimage.cpp.obj	52d4d34001eb6850
-4	723	7352282073165908	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
 4	616	7352282497355731	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
-8	721	7352282498392883	CMakeFiles/tinyRender.dir/model.cpp.obj	4ce84c7aa7a874c6
 721	865	7352282499795166	tinyRender.exe	200122eeaf7e6730
+8	680	7352282072721491	CMakeFiles/tinyRender.dir/tgaimage.cpp.obj	52d4d34001eb6850
+8	721	7352282498392883	CMakeFiles/tinyRender.dir/model.cpp.obj	4ce84c7aa7a874c6
+4	610	7352291998511869	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+610	774	7352292000053781	tinyRender.exe	200122eeaf7e6730
+6	576	7352292307048520	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+577	700	7352292308278386	tinyRender.exe	200122eeaf7e6730
+3	584	7352293598798710	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+585	713	7352293600011211	tinyRender.exe	200122eeaf7e6730
+3	652	7352294655549627	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+652	778	7352294656779445	tinyRender.exe	200122eeaf7e6730
+3	533	7352294870425751	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+533	653	7352294871594246	tinyRender.exe	200122eeaf7e6730
+3	579	7352295097438740	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+580	728	7352295098891540	tinyRender.exe	200122eeaf7e6730
+3	553	7352295389480125	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+554	679	7352295390706880	tinyRender.exe	200122eeaf7e6730
+3	542	7352295980555407	CMakeFiles/tinyRender.dir/main.cpp.obj	15f31cd4223013e1
+543	668	7352295981777941	tinyRender.exe	200122eeaf7e6730

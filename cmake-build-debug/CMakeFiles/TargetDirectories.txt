@@ -1,0 +1,3 @@
+D:/blackbirdTinyRenderer/cmake-build-debug/CMakeFiles/tinyRender.dir
+D:/blackbirdTinyRenderer/cmake-build-debug/CMakeFiles/edit_cache.dir
+D:/blackbirdTinyRenderer/cmake-build-debug/CMakeFiles/rebuild_cache.dir

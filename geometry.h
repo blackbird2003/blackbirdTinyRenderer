@@ -35,12 +35,18 @@ template <class T> struct Vec3 {
     Vec3<T> & normalize(T l=1) { *this = (*this)*(l/norm()); return *this; }
     T& operator[](int index) { return raw[index]; }
     template <class > friend std::ostream& operator<<(std::ostream& s, Vec3<T>& v);
+
+    Vec2<T> toVec2() {
+        return Vec2<T> (x, y);
+    };
 };
 
 typedef Vec2<float> Vec2f;
 typedef Vec2<int>   Vec2i;
 typedef Vec3<float> Vec3f;
 typedef Vec3<int>   Vec3i;
+
+
 
 template <class T> std::ostream& operator<<(std::ostream& s, Vec2<T>& v) {
     s << "(" << v.x << ", " << v.y << ")\n";
@@ -64,8 +70,17 @@ template <class T>
 class Triangle2D: public Polygon2D<T> {
 public:
     using Polygon2D<T>::pt;
-    Triangle2D(std::vector<Vec2<T>> _pt): Polygon2D<T>(3, _pt) {}
-    Vec3f baryCentric(Vec2i P) {
+    std::vector<T> depth;
+
+    Triangle2D(std::vector<Vec2<T>> _pt, std::vector<Vec2<T>> _depth = {0, 0, 0}):
+        Polygon2D<T>(3, _pt),
+        depth(_depth) {}
+
+    Triangle2D(std::vector<Vec3<float>> _pt):
+        Polygon2D<T>(3, {_pt[0].toVec2(), _pt[1].toVec2(), _pt[2].toVec2()}),
+        depth({_pt[0].z, _pt[1].z, _pt[2].z}) {}
+
+    Vec3f baryCentric(Vec2f P) {
         Vec3f u = Vec3f(pt[2][0]-pt[0][0], pt[1][0]-pt[0][0], pt[0][0]-P[0])^Vec3f(pt[2][1]-pt[0][1], pt[1][1]-pt[0][1], pt[0][1]-P[1]);
         /* `pts` and `P` has integer value as coordinates
            so `abs(u[2])` < 1 means `u[2]` is 0, that means
@@ -80,6 +95,8 @@ public:
         return true;
     }
 };
+
+
 
 
 

@@ -351,3 +351,139 @@ int main(int argc, char** argv) {
 ![image-20240419205641217](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240419195642124-634629665.png)
 
 可以发现，位于口腔中的三角形遮住了嘴唇。下一节课中，我们将考虑深度测试，正确处理多边形的遮挡关系。
+
+
+
+## Lesson 3: Z-Buffer
+
+深度检测算法的基本原理是，引入一个大小为像素数量的Z-Buffer数组，初始化所有像素点深度为负无穷。
+
+在遍历像素点时，比较当前三角形上点的深度是否小于Z-Buffer的数值，如果小于，则更新该像素并更新Z-Buffer。
+
+为此，我们需要为屏幕坐标增加一维深度（对于上面的人脸设置为模型的z即可）。在drawSolidTriangle()中增加对深度缓冲区的判断。
+
+```cpp
+//Iterate all points in the rectangular bounding box of triangle, draw if the point is inside
+// 2024 04 26 2d->3d
+void drawSolidTriangle(Triangle2D<float> tri, TGAImage &image, TGAColor color, float *zbuffer) {
+    Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
+    Vec2f bboxmax(0, 0);
+    Vec2f clamp(image.get_width()-1, image.get_height()-1);
+    for (int i=0; i<3; i++) {
+        bboxmin.x = std::max((float)0, std::min(bboxmin.x, tri.pt[i].x));
+        bboxmin.y = std::max((float)0, std::min(bboxmin.y, tri.pt[i].y));
+
+        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, tri.pt[i].x));
+        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, tri.pt[i].y));
+    }
+    Vec3f P;
+    for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
+        for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
+            Vec3f bc_screen  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
+            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
+            if (zbuffer[int(P.x+P.y*width)]<P.z) {
+                zbuffer[int(P.x + P.y * width)] = P.z;
+                image.set(P.x, P.y, color);
+            }
+        }
+    }
+};
+
+
+
+
+Vec3f worldToScreen(Vec3f v) {
+    return Vec3f(int((v.x+1.)*width/2.+.5), int((v.y+1.)*height/2.+.5), v.z);
+}
+
+int main(int argc, char** argv) {
+    if (2==argc) {
+        model = new Model(argv[1]);
+    } else {
+        model = new Model("obj/african_head.obj");
+    }
+
+    float *zbuffer = new float[width * height];
+    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
+
+
+    TGAImage image(width, height, TGAImage::RGB);
+    Vec3f light_dir(0,0,-1);
+    int cnt = 0;
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec3f screen_coords[3];
+        Vec3f world_coords[3];
+        for (int j=0; j<3; j++) {
+            Vec3f v = model->vert(face[j]);
+            //screen_coords[j] = Vec2i((v.x+1.)*width/2., (v.y+1.)*height/2.);
+            world_coords[j]  = v;
+            screen_coords[j] = worldToScreen(v);
+        }
+
+        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
+        n.normalize();
+        float intensity = n*light_dir;
+
+        if (intensity>0) {
+            printf("ok %d\n", ++cnt);
+            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), image, TGAColor(intensity*255, intensity*255, intensity*255, 255), zbuffer);
+        }
+    }
+
+    image.flip_vertically();
+    image.write_tga_file("output.tga");
+    delete model;
+    return 0;
+}
+```
+
+同时，在Triangle2D类中加入深度参数
+
+```cpp
+template <class T>
+class Triangle2D: public Polygon2D<T> {
+public:
+    using Polygon2D<T>::pt;
+    std::vector<T> depth;
+    
+    Triangle2D(std::vector<Vec2<T>> _pt, std::vector<Vec2<T>> _depth = {0, 0, 0}): 
+        Polygon2D<T>(3, _pt), 
+        depth(_depth) {}
+        
+    Triangle2D(std::vector<Vec3<float>> _pt):
+        Polygon2D<T>(3, {_pt[0].toVec2(), _pt[1].toVec2(), _pt[2].toVec2()}),
+        depth({_pt[0].z, _pt[1].z, _pt[2].z}) {}
+        
+    Vec3f baryCentric(Vec2f P) {
+        Vec3f u = Vec3f(pt[2][0]-pt[0][0], pt[1][0]-pt[0][0], pt[0][0]-P[0])^Vec3f(pt[2][1]-pt[0][1], pt[1][1]-pt[0][1], pt[0][1]-P[1]);
+        /* `pts` and `P` has integer value as coordinates
+           so `abs(u[2])` < 1 means `u[2]` is 0, that means
+           triangle is degenerate, in this case return something with negative coordinates */
+        if (std::abs(u.z)<1) return Vec3f(-1,1,1);
+        return Vec3f(1.f-(u.x+u.y)/u.z, u.y/u.z, u.x/u.z);
+    }
+
+    bool inInside(Vec2i P) {
+        auto bc = baryCentric(P);
+        if (bc.x<0 || bc.y<0 || bc.z<0) return false;
+        return true;
+    }
+};
+
+
+
+```
+
+效果如图所示：
+![image-20240426175739547](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240426165741120-55012551.png)
+
+### Bouns: Texture Mapping
+
+在.obj文件中，有以“vt u v”开头的行，它们给出了一个纹理坐标数组。 
+
+tinyrender作者提供了漫反射纹理： [african_head_diffuse.tga](..\Downloads\african_head_diffuse.tga) 
+
+据此，我们可以给上述人脸模型添加纹理
+
+（咕咕咕）

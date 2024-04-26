@@ -54,8 +54,8 @@ const TGAColor green = TGAColor(0, 255, 0, 255);
 const TGAColor blue = TGAColor(0, 0, 255, 255);
 
 //Iterate all points in the rectangular bounding box of triangle, draw if the point is inside
-// 2024 04 26 2d->3d
-void drawSolidTriangle(Triangle2D<float> tri, TGAImage &image, TGAColor color, float *zbuffer) {
+// 2024 04 26 2d->3d, texture mapping
+void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float intensity, float *zbuffer) {
     Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
     Vec2f bboxmax(0, 0);
     Vec2f clamp(image.get_width()-1, image.get_height()-1);
@@ -69,10 +69,13 @@ void drawSolidTriangle(Triangle2D<float> tri, TGAImage &image, TGAColor color, f
     Vec3f P;
     for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
-            Vec3f bc_screen  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
-            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
+            Vec3f bc  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
+            if (bc.x<0 || bc.y<0 || bc.z<0) continue;
             if (zbuffer[int(P.x+P.y*width)]<P.z) {
                 zbuffer[int(P.x + P.y * width)] = P.z;
+
+                Vec2i P_uv = uv[0] * bc.x + uv[1] * bc.y + uv[2] * bc.z;
+                TGAColor color = model->diffuse(P_uv);
                 image.set(P.x, P.y, color);
             }
         }
@@ -117,7 +120,9 @@ int main(int argc, char** argv) {
 
         if (intensity>0) {
             printf("ok %d\n", ++cnt);
-            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), image, TGAColor(intensity*255, intensity*255, intensity*255, 255), zbuffer);
+            Vec2i uv[3];
+            for (int j = 0; j < 3; j++) uv[j] = model->uv(i, j);
+            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), uv, image, intensity, zbuffer);
         }
     }
 
@@ -126,3 +131,4 @@ int main(int argc, char** argv) {
     delete model;
     return 0;
 }
+

@@ -354,7 +354,7 @@ int main(int argc, char** argv) {
 
 
 
-## Lesson 3: Z-Buffer
+## Lesson 3: Hidden faces removal (z buffer)
 
 深度检测算法的基本原理是，引入一个大小为像素数量的Z-Buffer数组，初始化所有像素点深度为负无穷。
 
@@ -482,8 +482,225 @@ public:
 
 在.obj文件中，有以“vt u v”开头的行，它们给出了一个纹理坐标数组。 
 
+> The number in the middle (between the slashes) in the facet lines "f x/x/x x/x/x x/x/x" are the texture coordinates of this vertex of this triangle. Interpolate it inside the triangle, multiply by the width-height of the texture image and you will get the color to put in your render.
+
 tinyrender作者提供了漫反射纹理： [african_head_diffuse.tga](..\Downloads\african_head_diffuse.tga) 
 
-据此，我们可以给上述人脸模型添加纹理
+据此，我们可以给上述人脸模型添加纹理。此时，main函数中drawSolidTriangle函数里不需要再传入颜色，只需要传入intensity即可，另外需要传入当前三角形三个点的纹理坐标uv。
 
-（咕咕咕）
+```cpp
+//Iterate all points in the rectangular bounding box of triangle, draw if the point is inside
+// 2024 04 26 2d->3d, texture mapping
+void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float intensity, float *zbuffer) {
+    Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
+    Vec2f bboxmax(0, 0);
+    Vec2f clamp(image.get_width()-1, image.get_height()-1);
+    for (int i=0; i<3; i++) {
+        bboxmin.x = std::max((float)0, std::min(bboxmin.x, tri.pt[i].x));
+        bboxmin.y = std::max((float)0, std::min(bboxmin.y, tri.pt[i].y));
+
+        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, tri.pt[i].x));
+        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, tri.pt[i].y));
+    }
+    Vec3f P;
+    for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
+        for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
+            Vec3f bc  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
+            if (bc.x<0 || bc.y<0 || bc.z<0) continue;
+            if (zbuffer[int(P.x+P.y*width)]<P.z) {
+                zbuffer[int(P.x + P.y * width)] = P.z;
+
+                Vec2i P_uv = uv[0] * bc.x + uv[1] * bc.y + uv[2] * bc.z;
+                TGAColor color = model->diffuse(P_uv);
+                image.set(P.x, P.y, color);
+            }
+        }
+    }
+};
+
+
+
+
+Vec3f worldToScreen(Vec3f v) {
+    return Vec3f(int((v.x+1.)*width/2.+.5), int((v.y+1.)*height/2.+.5), v.z);
+}
+
+int main(int argc, char** argv) {
+    if (2==argc) {
+        model = new Model(argv[1]);
+    } else {
+        model = new Model("obj/african_head.obj");
+    }
+
+    float *zbuffer = new float[width * height];
+    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
+
+
+    TGAImage image(width, height, TGAImage::RGB);
+    Vec3f light_dir(0,0,-1);
+    int cnt = 0;
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec3f screen_coords[3];
+        Vec3f world_coords[3];
+        for (int j=0; j<3; j++) {
+            Vec3f v = model->vert(face[j]);
+            //screen_coords[j] = Vec2i((v.x+1.)*width/2., (v.y+1.)*height/2.);
+            world_coords[j]  = v;
+            screen_coords[j] = worldToScreen(v);
+        }
+
+        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
+        n.normalize();
+        float intensity = n*light_dir;
+
+        if (intensity>0) {
+            printf("ok %d\n", ++cnt);
+            Vec2i uv[3];
+            for (int j = 0; j < 3; j++) uv[j] = model->uv(i, j);
+            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), uv, image, intensity, zbuffer);
+        }
+    }
+
+    image.flip_vertically();
+    image.write_tga_file("output.tga");
+    delete model;
+    return 0;
+}
+```
+
+model.h和model.cpp需要修改以支持纹理。将纹理.tga文件仿在模型同文件夹下。
+
+下面的代码来自知乎
+
+```cpp
+/*
+作者：吴腾
+链接：https://zhuanlan.zhihu.com/p/523503467
+来源：知乎
+著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
+*/
+//model.h
+#pragma once
+
+#include <vector>
+#include "geometry.h"
+#include "tgaimage.h"
+
+class Model {
+private:
+    std::vector<Vec3f> verts_;
+    std::vector<std::vector<Vec3i>> faces_;
+    std::vector<Vec3f> norms_;
+    std::vector<Vec2f> uv_;
+    TGAImage diffuseMap_;
+    void loadTexture(std::string filename, const char* suffix, TGAImage& image);
+public:
+    Model(const char *filename);
+    ~Model();
+    int nverts();
+    int nfaces();
+    Vec3f vert(int i);
+    std::vector<int> face(int idx);
+    Vec2i uv(int iface, int nvert);
+    TGAColor diffuse(Vec2i uv);
+};
+//model.cpp
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include "model.h"
+
+Model::Model(const char *filename) : verts_(), faces_(), norms_(), uv_() {
+    std::ifstream in;
+    in.open (filename, std::ifstream::in);
+    if (in.fail()) return;
+    std::string line;
+    while (!in.eof()) {
+        std::getline(in, line);
+        std::istringstream iss(line.c_str());
+        char trash;
+        if (!line.compare(0, 2, "v ")) {
+            iss >> trash;
+            Vec3f v;
+            for (int i=0;i<3;i++) iss >> v.raw[i];
+            verts_.push_back(v);
+        }
+        else if(!line.compare(0, 3, "vt ")) {
+            iss >> trash >> trash;
+            Vec2f uv;
+            for (int i = 0; i < 2; i++) iss >> uv[i];
+            uv_.push_back(uv);
+        }
+        else if (!line.compare(0, 3, "vn ")) {
+            iss >> trash >> trash;
+            Vec3f normal;
+            for (int i = 0; i < 3; i++) iss >> normal[i];
+            norms_.push_back(normal);
+        }
+        else if (!line.compare(0, 2, "f ")) {
+            std::vector<Vec3i> f;
+            Vec3i tmp;
+            iss >> trash;
+            while (iss >> tmp[0] >> trash >> tmp[1] >> trash >> tmp[2]) {
+                for (int i = 0; i < 3; i++) tmp[i]--;
+                f.push_back(tmp);
+            }
+            faces_.push_back(f);
+        }
+    }
+    std::cerr << "# v# " << verts_.size() << " f# "  << faces_.size() << " vt# " << uv_.size() << " vn# " << norms_.size() << std::endl;
+    loadTexture(filename, "_diffuse.tga", diffuseMap_);
+}
+
+
+Model::~Model() {
+}
+
+int Model::nverts() {
+    return (int)verts_.size();
+}
+
+int Model::nfaces() {
+    return (int)faces_.size();
+}
+
+std::vector<int> Model::face(int idx) {
+    std::vector<int> face;
+    std::vector<Vec3i> tmp = faces_[idx];
+    for (int i = 0; i < tmp.size(); i++)
+        face.push_back(tmp[i][0]);
+    return face;
+}
+
+Vec3f Model::vert(int i) {
+    return verts_[i];
+}
+
+void Model::loadTexture(std::string filename, const char* suffix, TGAImage& image)
+{
+    std::string texfile(filename);
+    size_t dot = texfile.find_last_of(".");
+    if (dot != std::string::npos) {
+        texfile = texfile.substr(0, dot) + std::string(suffix);
+        std::cerr << "texture file " << texfile << " loading " << (image.read_tga_file(texfile.c_str()) ? "ok" : "failed") << std::endl;
+        image.flip_vertically();
+    }
+}
+
+TGAColor Model::diffuse(Vec2i uv)
+{
+    return diffuseMap_.get(uv.x, uv.y);
+}
+
+Vec2i Model::uv(int iface, int nvert)
+{
+    int idx = faces_[iface][nvert][1];
+    return Vec2i(uv_[idx].x * diffuseMap_.get_width(), uv_[idx].y * diffuseMap_.get_height());
+}
+```
+
+效果
+![image-20240426190246539](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240426180250012-1899969424.png)

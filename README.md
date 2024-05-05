@@ -4,6 +4,8 @@
 
 该项目主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写
 
+推荐先过一下GAMES101
+
 ## Lesson 0 Getting Started
 
 ### Using TGA image format
@@ -34,18 +36,13 @@ int main(int argc, char** argv) {
 
 个人推荐的环境：Clion + CMake。（因为VsCode CMake调试功能实在搞不懂=.=)
 
-CMakeLists.txt这样写就可以
+涉及导入模型，需要将工作目录设置为工程文件夹
 
-```cmake
-project(tinyRenderer)
-add_executable(tinyRender main.cpp tgaimage.cpp)
-```
+![image-20240505230016266](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505220018544-333214793.png)
 
-由于图像生成在cmake-build-debug下，需在窗口设置“显示排除的文件”
+![image-20240505230043985](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505220047826-450326712.png)
 
-![image-20240419181611460](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240419171612190-1290655735.png)
-
-但我的Clion存在tga图像无法加载的bug。在设置->编辑器->文件类型中去掉.tga，然后选择用本地程序打开，虽然不太方便但勉强可用。
+但我的Clion存在tga图像无法加载的bug。在设置->编辑器->文件类型中去掉.tga，然后选择用本地程序打开即可。
 
 ## Lesson 1 Bresenham’s Line Drawing Algorithm
 
@@ -124,7 +121,7 @@ int main(int argc, char** argv)
 
 ## Lesson 2: Triangle rasterization and back face culling
 
-三维物体模型通常以三角形为基础。为了方便表示点、向量、多边形，写一个geometry.h。
+三维物体模型通常以三角形为基础。为了方便表示点、向量、多边形，写geometry.h。
 
 ```cpp
 #pragma once
@@ -179,9 +176,9 @@ template <class t> std::ostream& operator<<(std::ostream& s, Vec3<t>& v) {
 
 
 
-如何画出实心的三角形
+如何画出实心的三角形？一般来说，有扫描线和边界函数两种算法。
 
-对于多线程的CPU,采用下面的方式更为高效：先找到三角形的矩形包围盒，再逐点判断是否在三角形中
+对于多线程的CPU,采用边界函数法更为高效：先找到三角形的矩形包围盒，再逐点判断是否在三角形中
 
 ```cpp
 triangle(vec2 points[3]) { 
@@ -374,13 +371,18 @@ void drawSolidTriangle(Triangle2D<float> tri, TGAImage &image, TGAColor color, f
         bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, tri.pt[i].x));
         bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, tri.pt[i].y));
     }
-    Vec3f P;
+    Vec3i P;
     for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
             Vec3f bc_screen  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
             if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
-            if (zbuffer[int(P.x+P.y*width)]<P.z) {
-                zbuffer[int(P.x + P.y * width)] = P.z;
+            
+            //bugfix
+            P.z = tri.depth[0] * bc.x + tri.depth[1] * bc.y + tri.depth[2] * bc.z;
+
+            int idx = P.x+P.y*width;
+            if (zbuffer[idx]<P.z) {
+                zbuffer[idx] = P.z;
                 image.set(P.x, P.y, color);
             }
         }
@@ -436,7 +438,7 @@ int main(int argc, char** argv) {
 }
 ```
 
-同时，在Triangle2D类中加入深度参数
+同时，在Triangle2D类中加入depth数组即可
 
 ```cpp
 template <class T>
@@ -500,13 +502,17 @@ void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float 
         bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, tri.pt[i].x));
         bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, tri.pt[i].y));
     }
-    Vec3f P;
+    Vec3i P;
     for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
             Vec3f bc  = tri.baryCentric(P.toVec2());//toTriangle2D().baryCentric(P);
             if (bc.x<0 || bc.y<0 || bc.z<0) continue;
-            if (zbuffer[int(P.x+P.y*width)]<P.z) {
-                zbuffer[int(P.x + P.y * width)] = P.z;
+            
+            P.z = tri.depth[0] * bc.x + tri.depth[1] * bc.y + tri.depth[2] * bc.z;
+
+            int idx = P.x+P.y*width;
+            if (zbuffer[idx]<P.z) {
+                zbuffer[idx] = P.z;
 
                 Vec2i P_uv = uv[0] * bc.x + uv[1] * bc.y + uv[2] * bc.z;
                 TGAColor color = model->diffuse(P_uv);
@@ -919,7 +925,91 @@ int main() {
 
 ![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f04.png)
 
-### Transformation of normal vectors
+
+
+
+
+
+
+关于look at的推导，此处写的有些混乱
+建议参阅https://www.zhihu.com/question/447781866 
+
+下面是个人理解：
+
+简单来说，设M是(0, 0, 0),[i,j,k]到eyepos, [i',j',k']的变换矩阵
+则M=TR,先旋转后平移
+
+其中旋转矩阵R根据单位向量**左乘**该矩阵得到新单位向量，很容易得到(此处r,u,v是i',j',k'在原坐标系下的坐标)
+
+![image-20240505220527743](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505210530096-395261047.png)
+
+而T则为原点平移到eye pos的平移矩阵 （C是eyepos)
+
+![image-20240505221319762](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505211321938-1985120681.png)
+
+此为对坐标轴的变换矩阵，即，我们用M计算了**新的单位向量在原坐标系下的坐标**，而要得到原来单位向量在新坐标系下的坐标，显然应该左乘M的逆矩阵。这样，我们就求得了ModelView矩阵。
+
+
+
+据此，编写lookup实现modelview的计算
+
+```cpp
+Vec3f light_dir = Vec3f(0, 0, -1).normalize();
+Vec3f eye(1, 1, 3);
+Vec3f center(0, 0, 0);
+Vec3f up(0, 1, 0);
+//Vec3f camera(0, 0, 3);
+
+//screen_coordinate = viewport * projection * modelview * world_coordinate
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye - center).normalize();
+    Vec3f x = (up ^ z).normalize();
+    Vec3f y = (z ^ x).normalize();
+    Matrix M_inv = Matrix::identity(4);
+    Matrix T = Matrix::identity(4);
+    //thanks https://www.zhihu.com/question/447781866
+    for (int i = 0; i < 3; i++) {
+        M_inv[0][i] = x[i];
+        M_inv[1][i] = y[i];
+        M_inv[2][i] = z[i];
+        T[i][3] = -eye[i];
+    }
+    return M_inv * T;
+}
+
+
+Matrix projection(Vec3f eye, Vec3f center) {
+    Matrix m = Matrix::identity(4);
+    m[3][2] = -1.f / (eye - center).norm();
+    //m[3][2] = -1.f / camera.z;
+    return m;
+}
+
+
+int main() {
+    ...
+        
+    Matrix modelviewMatrix = lookat(eye, center, up);
+    Matrix projectionMatrix = projection(eye, center);
+    Matrix viewportMatrix = viewport(width / 8, height / 8, width * 0.75, height * 0.75);
+
+    ...
+    screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * modelviewMatrix * v2hc(v));
+    ...
+    
+}
+```
+
+效果（目前有点bug)
+
+![image-20240505225818988](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505215822020-1676545529.png)
+
+
+
+
+
+
+### Bouns：Transformation of normal vectors
 
 为了处理光照，我们将模型进行坐标变换后，如果模型提供了每个面的法向量，还需要将法向量也进行变换。
 
@@ -938,6 +1028,8 @@ int main() {
 ![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f07.png)
 
 因此，如果对坐标(x,y,z)做变换M，要满足原来的直线方程，对法向量的变换矩阵为M的逆矩阵的转置（或者转置再求逆，转置和求逆是**可交换的**，证明略）
+
+
 
 
 

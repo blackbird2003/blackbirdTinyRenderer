@@ -56,7 +56,7 @@ const TGAColor blue = TGAColor(0, 0, 255, 255);
 
 //Iterate all points in the rectangular bounding box of triangle, draw if the point is inside
 // 2024 04 26 2d->3d, texture mapping
-void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float intensity, float *zbuffer) {
+void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float intensity, int *zbuffer) {
     Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
     Vec2f bboxmax(0, 0);
     Vec2f clamp(image.get_width()-1, image.get_height()-1);
@@ -72,8 +72,11 @@ void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float 
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
             Vec3f bc  = tri.baryCentric(Vec2f(P.x, P.y));//toTriangle2D().baryCentric(P);
             if (bc.x<0 || bc.y<0 || bc.z<0) continue;
+
+            P.z = tri.depth[0] * bc.x + tri.depth[1] * bc.y + tri.depth[2] * bc.z;
+
             int idx = P.x + P.y * width;
-            if (zbuffer[idx]<P.z) {
+            if (P.z > zbuffer[idx]) {
                 zbuffer[idx] = P.z;
                 Vec2i P_uv = uv[0] * bc.x + uv[1] * bc.y + uv[2] * bc.z;
                 TGAColor color = model->diffuse(P_uv);
@@ -96,12 +99,36 @@ Vec3f hc2v(const Matrix &hc) {
     return Vec3f(hc[0][0], hc[1][0], hc[2][0]) * (1.f / hc[3][0]);
 }
 
-Vec3f light_dir(0,0,-1);
-Vec3f camera(0, 0, 3);
-//project to z = 0
-Matrix projection(const Vec3f &camera) {
+
+
+Vec3f light_dir = Vec3f(0, 0, -1).normalize();
+Vec3f eye(1, 1, 3);
+Vec3f center(0, 0, 0);
+Vec3f up(0, 1, 0);
+//Vec3f camera(0, 0, 3);
+
+//screen_coordinate = viewport * projection * modelview * world_coordinate
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye - center).normalize();
+    Vec3f x = (up ^ z).normalize();
+    Vec3f y = (z ^ x).normalize();
+    Matrix M_inv = Matrix::identity(4);
+    Matrix T = Matrix::identity(4);
+    //thanks https://www.zhihu.com/question/447781866
+    for (int i = 0; i < 3; i++) {
+        M_inv[0][i] = x[i];
+        M_inv[1][i] = y[i];
+        M_inv[2][i] = z[i];
+        T[i][3] = -eye[i];
+    }
+    return M_inv * T;
+}
+
+
+Matrix projection(Vec3f eye, Vec3f center) {
     Matrix m = Matrix::identity(4);
-    m[3][2] = -1.f/camera.z;
+    m[3][2] = -1.f / (eye - center).norm();
+    //m[3][2] = -1.f / camera.z;
     return m;
 }
 
@@ -126,15 +153,19 @@ int main(int argc, char** argv) {
     }
 
     //Initialize Z-Buffer
-    float *zbuffer = new float[width * height];
-    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
-
+    //    float *zbuffer = new float[width * height];
+    //    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
+    int *zbuffer = new int[width * height];
+    for (int i = 0; i < width*height; i++) {
+        zbuffer[i] = std::numeric_limits<int>::min();
+    }
 
     TGAImage image(width, height, TGAImage::RGB);
 
     int cnt = 0;
 
-    Matrix projectionMatrix = projection(camera);
+    Matrix modelviewMatrix = lookat(eye, center, up);
+    Matrix projectionMatrix = projection(eye, center);
     Matrix viewportMatrix = viewport(width / 8, height / 8, width * 0.75, height * 0.75);
 
     for (int i=0; i<model->nfaces(); i++) {
@@ -147,11 +178,12 @@ int main(int argc, char** argv) {
 
             //world -> screen:
             //3d coordinate -> homogeneous coordinates
-            //-> projection trans(camera at (0,0,c), project to plane z = 0)
-            //-> viewport trans(to make central at (w/2,h/2,d/2))
+            //-> modelview trans (into camera coordinate, camera at eyepos, point to center, with up direction)
+            //-> projection trans (camera at (0, 0, 1) project to z = 0)
+            //-> viewport trans(to make center at (w/2,h/2,d/2))
 
             world_coords[j]  = v;
-            screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * v2hc(v));
+            screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * modelviewMatrix * v2hc(v));
         }
 
         //Still simplified light intensity

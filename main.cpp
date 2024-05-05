@@ -96,7 +96,6 @@ Vec3f hc2v(const Matrix &hc) {
     return Vec3f(hc[0][0], hc[1][0], hc[2][0]) * (1.f / hc[3][0]);
 }
 
-
 Vec3f light_dir(0,0,-1);
 Vec3f camera(0, 0, 3);
 //project to z = 0
@@ -136,7 +135,7 @@ int main(int argc, char** argv) {
     int cnt = 0;
 
     Matrix projectionMatrix = projection(camera);
-    Matrix viewportMatrix = viewport(width / 8, height / 8, width * 3 / 4, height * 3 / 4);
+    Matrix viewportMatrix = viewport(width / 8, height / 8, width * 0.75, height * 0.75);
 
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
@@ -149,7 +148,7 @@ int main(int argc, char** argv) {
             //world -> screen:
             //3d coordinate -> homogeneous coordinates
             //-> projection trans(camera at (0,0,c), project to plane z = 0)
-            //-> viewport trans(to make central at (w/2,h/2,d/2) and into a cubic(1,1,1))
+            //-> viewport trans(to make central at (w/2,h/2,d/2))
 
             world_coords[j]  = v;
             screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * v2hc(v));
@@ -165,7 +164,6 @@ int main(int argc, char** argv) {
             Vec2i uv[3];
             for (int j = 0; j < 3; j++) uv[j] = model->uv(i, j);
             drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), uv, image, intensity, zbuffer);
-            //triangle((Vec3i)screen_coords[0], (Vec3i)screen_coords[1], (Vec3i)screen_coords[2], uv[0], uv[1], uv[2], image, intensity, zbuffer);
         }
     }
 

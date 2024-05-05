@@ -1,10 +1,8 @@
-## blackbirdTinyRender
+## TinyRender学习笔记
 
 通过手写软光栅渲染器加深对计算机图形学基本原理的理解，并练习C++面向对象程序设计。
 
 该项目主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写
-
-此外，还会参考[GAMES101: 现代计算机图形学入门 (ucsb.edu)](https://sites.cs.ucsb.edu/~lingqi/teaching/games101.html)中的作业框架
 
 ## Lesson 0 Getting Started
 
@@ -569,138 +567,379 @@ int main(int argc, char** argv) {
 }
 ```
 
-model.h和model.cpp需要修改以支持纹理。将纹理.tga文件仿在模型同文件夹下。
+model.h和model.cpp需要修改以支持纹理。作者在lesson4的结尾放出了代码。
 
-下面的代码来自知乎
+效果：
+
+
+
+![image-20240426190246539](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240426180250012-1899969424.png)
+
+这是一个平行投影的结果，损失了一部分真实感，例如，虽然耳朵旁边的头发在xoy平面上不与脸部重叠，但实际上应该被前边的皮肤遮挡，因为人眼/相机本身是“点光源”，而不是“平行光源”，物体发出的光线最终汇聚于一点，也就是所谓的“透视”。下面将引入透视投影：
+
+
+
+## Lesson 4: Perspective projection
+
+
+
+
+
+
+
+
+
+齐次坐标
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f10.png)
+
+
+
+
+
+简单变换（图来自GAMES101）
+
+![image-20240505174927834](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505164930200-682100308.png)
+
+逆变换
+
+![image-20240505175454080](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505165458526-1584226714.png)
+
+复合变换
+
+![image-20240505175019922](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505165021790-531013206.png)
+
+
+
+
+
+
+
+实现矩阵类：
 
 ```cpp
-/*
-作者：吴腾
-链接：https://zhuanlan.zhihu.com/p/523503467
-来源：知乎
-著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
-*/
-//model.h
-#pragma once
-
-#include <vector>
-#include "geometry.h"
-#include "tgaimage.h"
-
-class Model {
-private:
-    std::vector<Vec3f> verts_;
-    std::vector<std::vector<Vec3i>> faces_;
-    std::vector<Vec3f> norms_;
-    std::vector<Vec2f> uv_;
-    TGAImage diffuseMap_;
-    void loadTexture(std::string filename, const char* suffix, TGAImage& image);
+const int DEFAULT_D = 4;
+class Matrix {
+    std::vector<std::vector<float>> m;
+    int nrow, ncol;
 public:
-    Model(const char *filename);
-    ~Model();
-    int nverts();
-    int nfaces();
-    Vec3f vert(int i);
-    std::vector<int> face(int idx);
-    Vec2i uv(int iface, int nvert);
-    TGAColor diffuse(Vec2i uv);
-};
-//model.cpp
-#include <iostream>
-#include <string>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include "model.h"
+    Matrix(int r=DEFAULT_D, int c=DEFAULT_D) :
+        m(std::vector<std::vector<float>> (r, std::vector<float>(c, 0.f))),
+        nrow(r), ncol(c) {}
 
-Model::Model(const char *filename) : verts_(), faces_(), norms_(), uv_() {
-    std::ifstream in;
-    in.open (filename, std::ifstream::in);
-    if (in.fail()) return;
-    std::string line;
-    while (!in.eof()) {
-        std::getline(in, line);
-        std::istringstream iss(line.c_str());
-        char trash;
-        if (!line.compare(0, 2, "v ")) {
-            iss >> trash;
-            Vec3f v;
-            for (int i=0;i<3;i++) iss >> v.raw[i];
-            verts_.push_back(v);
-        }
-        else if(!line.compare(0, 3, "vt ")) {
-            iss >> trash >> trash;
-            Vec2f uv;
-            for (int i = 0; i < 2; i++) iss >> uv[i];
-            uv_.push_back(uv);
-        }
-        else if (!line.compare(0, 3, "vn ")) {
-            iss >> trash >> trash;
-            Vec3f normal;
-            for (int i = 0; i < 3; i++) iss >> normal[i];
-            norms_.push_back(normal);
-        }
-        else if (!line.compare(0, 2, "f ")) {
-            std::vector<Vec3i> f;
-            Vec3i tmp;
-            iss >> trash;
-            while (iss >> tmp[0] >> trash >> tmp[1] >> trash >> tmp[2]) {
-                for (int i = 0; i < 3; i++) tmp[i]--;
-                f.push_back(tmp);
+    int get_nrow() { return nrow; }
+    int get_ncol() { return ncol; }
+
+    static Matrix identity(int dimensions) {
+        Matrix E(dimensions, dimensions);
+        for (int i = 0; i < dimensions; i++)
+            E[i][i] = 1;
+        return E;
+    }
+
+    std::vector<float>& operator[](const int i) {
+        assert(i >= 0 && i < nrow);
+        return m[i];
+    }
+
+    const std::vector<float>& operator[](const int i) const {
+        assert(i >= 0 && i < nrow);
+        return m[i];
+    }
+
+    Matrix operator*(const Matrix& a) {
+        assert(this->ncol == a.nrow);
+        Matrix res(this->nrow, a.ncol);
+        for (int i = 0; i < this->nrow; i++) {
+            for (int j = 0; j < a.ncol; j++) {
+                res.m[i][j] = 0;
+                for (int k = 0; k < this->ncol; k++)
+                    res.m[i][j] += this->m[i][k]*a.m[k][j];
             }
-            faces_.push_back(f);
         }
+        return res;
     }
-    std::cerr << "# v# " << verts_.size() << " f# "  << faces_.size() << " vt# " << uv_.size() << " vn# " << norms_.size() << std::endl;
-    loadTexture(filename, "_diffuse.tga", diffuseMap_);
-}
 
-
-Model::~Model() {
-}
-
-int Model::nverts() {
-    return (int)verts_.size();
-}
-
-int Model::nfaces() {
-    return (int)faces_.size();
-}
-
-std::vector<int> Model::face(int idx) {
-    std::vector<int> face;
-    std::vector<Vec3i> tmp = faces_[idx];
-    for (int i = 0; i < tmp.size(); i++)
-        face.push_back(tmp[i][0]);
-    return face;
-}
-
-Vec3f Model::vert(int i) {
-    return verts_[i];
-}
-
-void Model::loadTexture(std::string filename, const char* suffix, TGAImage& image)
-{
-    std::string texfile(filename);
-    size_t dot = texfile.find_last_of(".");
-    if (dot != std::string::npos) {
-        texfile = texfile.substr(0, dot) + std::string(suffix);
-        std::cerr << "texture file " << texfile << " loading " << (image.read_tga_file(texfile.c_str()) ? "ok" : "failed") << std::endl;
-        image.flip_vertically();
+    Matrix transpose() {
+        Matrix res(ncol, nrow);
+        for (int i = 0; i < ncol; i++)
+            for (int j = 0; j < nrow; j++)
+                res.m[i][j] = m[j][i];
+        return res;
     }
-}
+    Matrix inverse() {
+        assert(nrow==ncol);
+        // augmenting the square matrix with the identity matrix of the same dimensions a => [ai]
+        Matrix result(nrow, ncol*2);
+        for(int i=0; i<nrow; i++)
+            for(int j=0; j<ncol; j++)
+                result[i][j] = m[i][j];
+        for(int i=0; i<nrow; i++)
+            result[i][i+ncol] = 1;
+        // first pass
+        for (int i=0; i<nrow-1; i++) {
+            // normalize the first row
+            for(int j=result.ncol-1; j>=0; j--)
+                result[i][j] /= result[i][i];
+            for (int k=i+1; k<nrow; k++) {
+                float coeff = result[k][i];
+                for (int j=0; j<result.ncol; j++) {
+                    result[k][j] -= result[i][j]*coeff;
+                }
+            }
+        }
+        // normalize the last row
+        for(int j=result.ncol-1; j>=nrow-1; j--)
+            result[nrow-1][j] /= result[nrow-1][nrow-1];
+        // second pass
+        for (int i=nrow-1; i>0; i--) {
+            for (int k=i-1; k>=0; k--) {
+                float coeff = result[k][i];
+                for (int j=0; j<result.ncol; j++) {
+                    result[k][j] -= result[i][j]*coeff;
+                }
+            }
+        }
+        // cut the identity matrix back
+        Matrix truncate(nrow, ncol);
+        for(int i=0; i<nrow; i++)
+            for(int j=0; j<ncol; j++)
+                truncate[i][j] = result[i][j+ncol];
+        return truncate;
+    }
 
-TGAColor Model::diffuse(Vec2i uv)
-{
-    return diffuseMap_.get(uv.x, uv.y);
-}
+    friend std::ostream& operator<<(std::ostream& s, Matrix& m);
+};
 
-Vec2i Model::uv(int iface, int nvert)
-{
-    int idx = faces_[iface][nvert][1];
-    return Vec2i(uv_[idx].x * diffuseMap_.get_width(), uv_[idx].y * diffuseMap_.get_height());
+inline std::ostream& operator<<(std::ostream& s, Matrix& m) {
+    for (int i = 0; i < m.nrow; i++)  {
+        for (int j = 0; j < m.ncol; j++) {
+            s << m[i][j];
+            if (j<m.ncol-1) s << "\t";
+        }
+        s << "\n";
+    }
+    return s;
 }
 ```
 
+
+
+一个简单投影矩阵的推导：
+
+假设相机位置为（0,0,c）成像平面为z=0，如图
+
+<img src="https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/525d3930435c3be900e4c7956edb5a1c.png" alt="img" style="zoom: 67%;" />
+
+
+
+根据三角形相似，x'/c = x/(c-z)，即有
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f15.png)
+
+同理
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f16.png)
+
+为了实现z轴方向上靠近相机的线段被拉伸，远离相机的线段被压缩，投影矩阵具有这样的形式
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f13.png)
+
+根据齐次坐标的结果，得到对应的投影点坐标
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f14.png)
+
+根据上面的结果，可知r=-1/c。
+
+我们可以得到一个简单情况下的投影矩阵，变换过程如图
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/04-perspective-projection/f17.png)
+
+
+
+
+
+在程序中，这个过程用如下方式实现：
+
+```cpp
+screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * v2hc(v));
+```
+
+(普通坐标 → 齐次坐标)
+
+世界坐标 → (经投影变换)投影坐标 → （经视口变换)屏幕坐标 
+
+(齐次坐标 → 普通坐标)
+
+这里的坐标包含位置(x,y)和深度z,深度交给z-buffer来处理
+
+视口变化的目的是将投影区域映射到[-1,1]^3的立方体中，便于绘制
+
+相关变化的实现：
+
+```cpp
+
+//Transition between coordinates (vector type) and homogeneous coordinates (matrix type)
+Matrix v2hc(const Vec3f &v) {
+    Matrix hc(4, 1);
+    hc[0][0] = v.x;
+    hc[1][0] = v.y;
+    hc[2][0] = v.z;
+    hc[3][0] = 1;
+    return hc;
+}
+Vec3f hc2v(const Matrix &hc) {
+    return Vec3f(hc[0][0], hc[1][0], hc[2][0]) * (1.f / hc[3][0]);
+}
+
+Vec3f light_dir(0,0,-1);
+Vec3f camera(0, 0, 3);
+//project to z = 0
+Matrix projection(const Vec3f &camera) {
+    Matrix m = Matrix::identity(4);
+    m[3][2] = -1.f/camera.z;
+    return m;
+}
+
+//viewport(width / 8, height / 8, width * 0.75, height * 0.75);
+//窗口边缘留出1/8空隙
+Matrix viewport(int x, int y, int w, int h) {
+    Matrix m = Matrix::identity(4);
+    //Translation
+    m[0][3] = x + w / 2.f;
+    m[1][3] = y + h / 2.f;
+    m[2][3] = depth / 2.f;
+    //scale to [0, 1]
+    m[0][0] = w / 2.f;
+    m[1][1] = h / 2.f;
+    m[2][2] = depth / 2.f;
+    return m;
+}
+
+int main() {
+	...
+
+    Matrix projectionMatrix = projection(camera);
+    Matrix viewportMatrix = viewport(width / 8, height / 8, width * 0.75, height * 0.75);
+
+    ...
+        
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec3f screen_coords[3];
+        Vec3f world_coords[3];
+        for (int j=0; j<3; j++) {
+            Vec3f v = model->vert(face[j]);
+            //world -> screen:
+            //3d coordinate -> homogeneous coordinates
+            //-> projection trans(camera at (0,0,c), project to plane z = 0)
+            //-> viewport trans(to make central at (w/2,h/2,d/2))
+
+            world_coords[j]  = v;
+            screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * v2hc(v));
+        }
+
+        //Still simplified light intensity
+        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
+        n.normalize();
+        float intensity = n*light_dir;
+
+        if (intensity>0) {
+            printf("ok %d\n", ++cnt);
+            Vec2i uv[3];
+            for (int j = 0; j < 3; j++) uv[j] = model->uv(i, j);
+            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), uv, image, intensity, zbuffer);
+        }
+    }
+    ...
+}
+```
+
+
+
+
+
 效果
-![image-20240426190246539](https://img2023.cnblogs.com/blog/1928276/202404/1928276-20240426180250012-1899969424.png)
+
+![image-20240504170937200](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240504160940105-1636523864.png)
+
+
+
+
+
+注：TinyRenderer的透视投影与GAMES101处理方式不同，GAMES101是把M\[3\]\[2\]固定为1，求解M的第三行，而此处是固定第三行为（0 0 1 0），求解M\[3\]\[2\]。
+
+此处并没有“近平面”的概念，认为n=0,f=c。
+
+下面是GAMES101给出的结果（第三行为0 0 A B）：
+
+<img src="https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505182227248-1392365094.png" alt="image-20240505192224927" style="zoom:50%;" />
+
+
+
+<img src="https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240505182300021-22198105.png" alt="image-20240505192257807" style="zoom:50%;" />
+
+
+
+## Lesson 5: Moving the camera
+
+之前，我们考虑了相机在(0,0,c)，朝着-z方向看的情况。
+
+对于任意的相机位置，需要三个向量来确定：相机坐标e，相机指向的点c，向上方向向量u,如图所示：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/b94dd4a591514fd66a91a6e4cc065644.png)
+
+我们假定相机总是朝着-z方向看，而u朝向正y方向，据此就得到了一个新的坐标系x'y'z'，
+
+下面考虑如何将物体坐标[x,y,z]转化为新坐标系下的[x',y',z']。
+
+
+
+
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f66a0139058ab1d1025dbfd8cd401389.png)
+
+首先回顾坐标[x,y,z]的定义，它是三个正交的单位向量i,j,k前面的系数
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f00.png)
+
+现在，我们有了新的单位向量i',j',k',那么一定存在矩阵M，使得
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f01.png)
+
+我们将OP写成OO'+O'P,与新的单位坐标建立联系：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f02.png)
+
+将[i',j',k']用上面的式子表示，提出[i,j,k]:
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f03.png)
+
+左边用[x,y,z]的定义式替换，就得到了[x',y',z']与[x,y,z]的关系
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f04.png)
+
+### Transformation of normal vectors
+
+为了处理光照，我们将模型进行坐标变换后，如果模型提供了每个面的法向量，还需要将法向量也进行变换。
+
+此处有一个结论：模型上的坐标通过矩阵M进行仿射变换，那么模型的法向量的变换矩阵是M的逆矩阵的转置。
+
+证明：考虑平面方程 Ax+By+Cz=0，它的法向量是（A,B,C) ,写成矩阵形式为：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f05.png)
+
+在两者之间插入M的逆和M：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f06.png)
+
+ 由于坐标均为列向量，把左边写成转置形式：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/05-camera/f07.png)
+
+因此，如果对坐标(x,y,z)做变换M，要满足原来的直线方程，对法向量的变换矩阵为M的逆矩阵的转置（或者转置再求逆，转置和求逆是**可交换的**，证明略）
+
+
+
+
+

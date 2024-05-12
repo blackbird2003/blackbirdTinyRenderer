@@ -2,9 +2,11 @@
 
 通过手写软光栅渲染器加深对计算机图形学基本原理的理解，并练习C++面向对象程序设计。
 
-该项目主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写
+该项目主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写，使用CMake构建
 
-推荐先过一下GAMES101
+可以浏览我的历史commit，找到不同进度时提交的代码。
+
+本项目涉及的几乎所有的图形学知识都在GAMES101课程中出现过，推荐将GAMES101作为前置课程，或配合GAMES101的进度一起学习。
 
 ## Lesson 0 Getting Started
 
@@ -349,7 +351,7 @@ int main(int argc, char** argv) {
 
 
 
-## Lesson 3: Hidden faces removal (z buffer)
+## Lesson 3: Z Buffer
 
 深度检测算法的基本原理是，引入一个大小为像素数量的Z-Buffer数组，初始化所有像素点深度为负无穷。
 
@@ -1029,9 +1031,225 @@ int main() {
 
 因此，如果对坐标(x,y,z)做变换M，要满足原来的直线方程，对法向量的变换矩阵为M的逆矩阵的转置（或者转置再求逆，转置和求逆是**可交换的**，证明略）
 
+## Lesson 6: Shaders 
+
+本节主要分为两大部分：重构代码，实现不同的shaders。
+
+再尝试用自己之前的屎山适配Shader部分后，我放弃了，直接使用作者写的geometry。内容大部分都很直观，值得注意的是
+
+```cpp
+template<size_t LEN,size_t DIM,typename T> vec<LEN,T> embed(const vec<DIM,T> &v, T fill=1) {
+    vec<LEN,T> ret;
+    for (size_t i=LEN; i--; ret[i]=(i<DIM?v[i]:fill));
+    return ret;
+}
+
+template<size_t LEN,size_t DIM, typename T> vec<LEN,T> proj(const vec<DIM,T> &v) {
+    vec<LEN,T> ret;
+    for (size_t i=LEN; i--; ret[i]=v[i]);
+    return ret;
+}
+```
+
+这两个模板的作用，分别是将低维向量拓展到高维（不足补1）、高维向量投影到低维（截取前LEN个坐标），在涉及其次坐标和普通坐标的转换时多次用到。
 
 
 
 
 
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/06-shaders/OpenGL-2.0-Programmable-Shader-Pipeline.png)
 
+
+
+Shader包含顶点着色和片元着色两个部件，将其抽离出来，可以使得我们通过修改Shader即可实现各种不同的渲染效果，而无需改动其他代码。
+
+在`gl.h`中，定义Shader的基本结构。不同Shader的通过继承基类重写两个虚函数来实现
+
+```cpp
+struct IShader {
+    virtual ~IShader() {}
+    virtual Vec4f  vertex(int iface, int nthvert) = 0;
+    virtual bool fragment(Vec3f bar, TGAColor &color) = 0;
+};
+```
+
+其中，iface是面的编号，而nthvert是顶点编号（对于三角形为0,1,2）。
+
+例如，一个简单的GouraudShader，vertex通过顶点法向量与光照的点乘计算三角形每个顶点的光照，而fragment通过重心坐标插值计算三角形区域中所有像素的颜色。
+
+```cpp
+struct GouraudShader : public IShader {
+    Vec3f varying_intensity;
+    //顶点着色
+    virtual Vec4f vertex(int iface, int nthvert) {
+        Vec4f glVertex = embed<4>(model->vert(iface, nthvert));
+        glVertex = Viewport * Projection * ModelView * glVertex;
+        //
+        varying_intensity[nthvert] = std::max(0.f, model->normal(iface, nthvert) * light_dir);
+        return glVertex;
+    }
+    //片段着色 用于drawTriangle 
+    //这里的bar即baryCentric
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        float intensity = varying_intensity * bar;
+        color = TGAColor(255, 255, 255) * intensity;
+        return false;	//返回值表示是否丢弃
+    }
+};
+
+//in main for every vertex
+GouraudShader shader;
+for (int i=0; i<model->nfaces(); i++) {
+    std::vector<int> face = model->face(i);
+    Vec3f world_coords[3];
+    Vec4f screen_coords[3];
+    for (int j = 0; j < 3; j++) {
+        Vec3f v = model->vert(face[j]);
+        world_coords[j] = v;
+        screen_coords[j] = shader.vertex(i, j);
+    }
+    drawTriangle(screen_coords, shader, image, zbuffer);
+}
+// in drawTriangle, for every pixel
+...
+TGAColor color;
+bool discard = shader.fragment(bc, color);
+if (!discard) {
+    zbuffer.set(P.x, P.y, TGAColor(frag_depth));
+    image.set(P.x, P.y, color);
+}    
+...
+```
+
+所得的效果如图
+
+![image-20240512211917138](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240512201920094-1588430460.png)
+
+我们可以轻松地修改着色器，实现不同的渲染效果，如将颜色设置为6个梯度的橙色：
+
+```cpp
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        float intensity = varying_intensity*bar;
+        if (intensity>.85) intensity = 1;
+        else if (intensity>.60) intensity = .80;
+        else if (intensity>.45) intensity = .60;
+        else if (intensity>.30) intensity = .45;
+        else if (intensity>.15) intensity = .30;
+        else intensity = 0;
+        color = TGAColor(255, 155, 0)*intensity;
+        return false;
+    }
+```
+
+效果：
+
+![image-20240512212544885](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240512202546531-812190877.png)
+
+**纹理着色器**
+
+接下来，我们可以实现漫反射纹理。只需要修改Shader添加纹理映射项即可。
+
+```cpp
+struct TextureShader : public IShader {
+    Vec3f          varying_intensity; // written by vertex shader, read by fragment shader
+    mat<2,3,float> varying_uv;        // same as above
+
+    virtual Vec4f vertex(int iface, int nthvert) {
+        varying_uv.set_col(nthvert, model->uv(iface, nthvert));
+        varying_intensity[nthvert] = std::max(0.f, model->normal(iface, nthvert)*light_dir); // get diffuse lighting intensity
+        Vec4f gl_Vertex = embed<4>(model->vert(iface, nthvert)); // read the vertex from .obj file
+        return Viewport*Projection*ModelView*gl_Vertex; // transform it to screen coordinates
+    }
+
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        float intensity = varying_intensity*bar;   // interpolate intensity for the current pixel
+        Vec2f uv = varying_uv*bar;                 // interpolate uv for the current pixel
+        color = model->diffuse(uv)*intensity;      // well duh
+        return false;                              // no, we do not discard this pixel
+    }
+};
+```
+
+效果
+
+![image-20240512212807641](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240512202811146-1791754725.png)
+
+**法线着色器**
+
+事实上，纹理图像中不止可以储存颜色，还可以储存法线方向、温度等等信息。通过纹理给出每个点的法线方向，就能实现表明的凹凸起伏效果。此时，纹理图像的RGB值不再储存颜色，而是用于储存法线，如下图。
+
+<img src="https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/06-shaders/african_head_nm.png" alt="img" style="zoom:50%;" />
+
+上节课的结尾，我们提到了“模型上的坐标通过矩阵M进行仿射变换，那么模型的法向量的变换矩阵是M的逆矩阵的转置”这一结论，根据这个结论，就可以直接在顶点着色器中分别计算顶点和法向量经过投影后的结构
+
+```cpp
+struct NormalShader : public IShader {
+    mat<2,3,float> varying_uv;  // same as above
+    mat<4,4,float> uniform_M;   //  Projection*ModelView
+    mat<4,4,float> uniform_MIT; // (Projection*ModelView).invert_transpose()
+
+    virtual Vec4f vertex(int iface, int nthvert) {
+        varying_uv.set_col(nthvert, model->uv(iface, nthvert));
+        Vec4f gl_Vertex = embed<4>(model->vert(iface, nthvert)); // read the vertex from .obj file
+        return Viewport*Projection*ModelView*gl_Vertex; // transform it to screen coordinates
+   }
+
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        Vec2f uv = varying_uv*bar;                 // interpolate uv for the current pixel
+        Vec3f n = proj<3>(uniform_MIT*embed<4>(model->normal(uv))).normalize();
+        Vec3f l = proj<3>(uniform_M  *embed<4>(light_dir        )).normalize();
+        float intensity = std::max(0.f, n*l);
+        color = model->diffuse(uv)*intensity;      // well duh
+        return false;                              // no, we do not discard this pixel
+    }
+};
+```
+
+效果：
+
+![image-20240512214259167](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240512204303617-1448246807.png)
+
+
+
+**Phone模型着色器**
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/06-shaders/e3720a5dfedc49edb0bf70f8bc64204a.png)
+
+根据Phone光照模型，物体的真实光照可以近似为环境光+漫反射+高光。据此，我们可以进一步得出更加真实的着色器。
+
+高光的计算如图所示：
+
+![img](https://raw.githubusercontent.com/ssloy/tinyrenderer/gh-pages/img/06-shaders/d58cd3bbab46463e87b782a12a147fbb.png)
+
+已知物体表明法向量为n，入射光为l，两者夹角为a，假设所有向量都被归一化，设反射光为r，则有l+r=2n cosa ，可求得反射光r=2n cosa - l = 2n(n·l)-l。反射光
+
+```cpp
+struct PhoneShader : public IShader {
+    mat<2,3,float> varying_uv;  // same as above
+    mat<4,4,float> uniform_M;   //  Projection*ModelView
+    mat<4,4,float> uniform_MIT; // (Projection*ModelView).invert_transpose()
+
+    virtual Vec4f vertex(int iface, int nthvert) {
+        varying_uv.set_col(nthvert, model->uv(iface, nthvert));
+        Vec4f gl_Vertex = embed<4>(model->vert(iface, nthvert)); // read the vertex from .obj file
+        return Viewport*Projection*ModelView*gl_Vertex; // transform it to screen coordinates
+    }
+
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        Vec2f uv = varying_uv*bar;
+        Vec3f n = proj<3>(uniform_MIT*embed<4>(model->normal(uv))).normalize();
+        Vec3f l = proj<3>(uniform_M  *embed<4>(light_dir        )).normalize();
+        Vec3f r = (n*(n*l*2.f) - l).normalize();   // reflected light
+        float spec = pow(std::max(r.z, 0.0f), model->specular(uv));
+        float diff = std::max(0.f, n*l);
+        TGAColor c = model->diffuse(uv);
+        color = c;
+        for (int i=0; i<3; i++) color[i] = std::min<float>(5 + c[i]*(diff + .6*spec), 255);
+        return false;
+    }
+};
+```
+
+按照环境光5+自身颜色*(1漫反射+0.6高光)，得到的效果如下
+
+![image-20240512220509696](https://img2023.cnblogs.com/blog/1928276/202405/1928276-20240512210513789-778169408.png)

@@ -1,231 +1,209 @@
 #pragma once
-
-#include <vector>
 #include <cmath>
+#include <vector>
 #include <cassert>
+#include <iostream>
 
-template <class T> struct Vec2 {
+template<size_t DimCols,size_t DimRows,typename T> class mat;
 
-    T x, y;
-    Vec2<T>() : x(T()), y(T()) {}
-    Vec2<T>(T _x, T _y) : x(_x), y(_y) {}
-    Vec2<T>(const Vec2<T> &v) : x(T()), y(T()) { *this = v; }
-    Vec2<T> & operator =(const Vec2<T> &v) {
-        if (this != &v) {
-            x = v.x;
-            y = v.y;
-        }
-        return *this;
-    }
-
-    inline Vec2<T> operator +(const Vec2<T> &V) const { return Vec2<T>(x+V.x, y+V.y); }
-    inline Vec2<T> operator -(const Vec2<T> &V) const { return Vec2<T>(x-V.x, y-V.y); }
-    inline Vec2<T> operator *(float f)          const { return Vec2<T>(x*f, y*f); }
-    T& operator[](int index) { return index == 0 ? x : y; }
-
-    template <class > friend std::ostream& operator<<(std::ostream& s, Vec2<T>& v);
+template <size_t DIM, typename T> struct vec {
+    vec() { for (size_t i=DIM; i--; data_[i] = T()); }
+    T& operator[](const size_t i)       { assert(i<DIM); return data_[i]; }
+    const T& operator[](const size_t i) const { assert(i<DIM); return data_[i]; }
+private:
+    T data_[DIM];
 };
 
-template <class T> struct Vec3 {
-    T x, y, z;
+/////////////////////////////////////////////////////////////////////////////////
 
-    Vec3<T>() : x(T()), y(T()), z(T()) { }
-    Vec3<T>(T _x, T _y, T _z) : x(_x), y(_y), z(_z) {}
+template <typename T> struct vec<2,T> {
+    vec() : x(T()), y(T()) {}
+    vec(T X, T Y) : x(X), y(Y) {}
+    template <class U> vec<2,T>(const vec<2,U> &v);
+    T& operator[](const size_t i)       { assert(i<2); return i<=0 ? x : y; }
+    const T& operator[](const size_t i) const { assert(i<2); return i<=0 ? x : y; }
 
-    template <class U> explicit Vec3<T>(const Vec3<U> &v);
-
-    Vec3<T>(const Vec3<T> &v) : x(T()), y(T()), z(T()) { *this = v; }
-    Vec3<T> & operator =(const Vec3<T> &v) {
-        if (this != &v) {
-            x = v.x;
-            y = v.y;
-            z = v.z;
-        }
-        return *this;
-    }
-
-    inline Vec3<T> operator ^(const Vec3<T> &v) const { return Vec3<T>(y*v.z-z*v.y, z*v.x-x*v.z, x*v.y-y*v.x); }
-    inline Vec3<T> operator +(const Vec3<T> &v) const { return Vec3<T>(x+v.x, y+v.y, z+v.z); }
-    inline Vec3<T> operator -(const Vec3<T> &v) const { return Vec3<T>(x-v.x, y-v.y, z-v.z); }
-    inline Vec3<T> operator *(float f)          const { return Vec3<T>(x*f, y*f, z*f); }
-    inline T operator *(const Vec3<T> &v) const { return x*v.x + y*v.y + z*v.z; }
-    float norm () const { return std::sqrt(x*x+y*y+z*z); }
-    Vec3<T> & normalize(T l=1) { *this = (*this)*(l/norm()); return *this; }
-    T& operator[](int index) { if (index == 0) return x; if (index == 1) return y; return z; }
-    template <class > friend std::ostream& operator<<(std::ostream& s, Vec3<T>& v);
-
-    Vec2<T> toVec2() {
-        return Vec2<T> (x, y);
-    };
+    T x,y;
 };
 
-typedef Vec2<float> Vec2f;
-typedef Vec2<int>   Vec2i;
-typedef Vec3<float> Vec3f;
-typedef Vec3<int>   Vec3i;
+/////////////////////////////////////////////////////////////////////////////////
 
-template <> template <>
-inline Vec3<int>::Vec3(const Vec3<float>& v) : x(int(v.x + .5)), y(int(v.y + .5)), z(int(v.z + .5)) {}
+template <typename T> struct vec<3,T> {
+    vec() : x(T()), y(T()), z(T()) {}
+    vec(T X, T Y, T Z) : x(X), y(Y), z(Z) {}
+    template <class U> vec<3,T>(const vec<3,U> &v);
+    T& operator[](const size_t i)       { assert(i<3); return i<=0 ? x : (1==i ? y : z); }
+    const T& operator[](const size_t i) const { assert(i<3); return i<=0 ? x : (1==i ? y : z); }
+    float norm() { return std::sqrt(x*x+y*y+z*z); }
+    vec<3,T> & normalize(T l=1) { *this = (*this)*(l/norm()); return *this; }
 
-template <> template <>
-inline Vec3<float>::Vec3(const Vec3<int>& v) : x(v.x), y(v.y), z(v.z) {}
-
-
-template <class T> std::ostream& operator<<(std::ostream& s, Vec2<T>& v) {
-    s << "(" << v.x << ", " << v.y << ")\n";
-    return s;
-}
-
-template <class T> std::ostream& operator<<(std::ostream& s, Vec3<T>& v) {
-    s << "(" << v.x << ", " << v.y << ", " << v.z << ")\n";
-    return s;
-}
-
-const int DEFAULT_D = 4;
-class Matrix {
-    std::vector<std::vector<float>> m;
-    int nrow, ncol;
-public:
-    Matrix(int r=DEFAULT_D, int c=DEFAULT_D) :
-        m(std::vector<std::vector<float>> (r, std::vector<float>(c, 0.f))),
-        nrow(r), ncol(c) {}
-
-    int get_nrow() { return nrow; }
-    int get_ncol() { return ncol; }
-
-    static Matrix identity(int dimensions) {
-        Matrix E(dimensions, dimensions);
-        for (int i = 0; i < dimensions; i++)
-            E[i][i] = 1;
-        return E;
-    }
-
-    std::vector<float>& operator[](const int i) {
-        assert(i >= 0 && i < nrow);
-        return m[i];
-    }
-
-    const std::vector<float>& operator[](const int i) const {
-        assert(i >= 0 && i < nrow);
-        return m[i];
-    }
-
-    Matrix operator*(const Matrix& a) {
-        assert(this->ncol == a.nrow);
-        Matrix res(this->nrow, a.ncol);
-        for (int i = 0; i < this->nrow; i++) {
-            for (int j = 0; j < a.ncol; j++) {
-                res.m[i][j] = 0;
-                for (int k = 0; k < this->ncol; k++)
-                    res.m[i][j] += this->m[i][k]*a.m[k][j];
-            }
-        }
-        return res;
-    }
-
-    Matrix transpose() {
-        Matrix res(ncol, nrow);
-        for (int i = 0; i < ncol; i++)
-            for (int j = 0; j < nrow; j++)
-                res.m[i][j] = m[j][i];
-        return res;
-    }
-    Matrix inverse() {
-        assert(nrow==ncol);
-        // augmenting the square matrix with the identity matrix of the same dimensions a => [ai]
-        Matrix result(nrow, ncol*2);
-        for(int i=0; i<nrow; i++)
-            for(int j=0; j<ncol; j++)
-                result[i][j] = m[i][j];
-        for(int i=0; i<nrow; i++)
-            result[i][i+ncol] = 1;
-        // first pass
-        for (int i=0; i<nrow-1; i++) {
-            // normalize the first row
-            for(int j=result.ncol-1; j>=0; j--)
-                result[i][j] /= result[i][i];
-            for (int k=i+1; k<nrow; k++) {
-                float coeff = result[k][i];
-                for (int j=0; j<result.ncol; j++) {
-                    result[k][j] -= result[i][j]*coeff;
-                }
-            }
-        }
-        // normalize the last row
-        for(int j=result.ncol-1; j>=nrow-1; j--)
-            result[nrow-1][j] /= result[nrow-1][nrow-1];
-        // second pass
-        for (int i=nrow-1; i>0; i--) {
-            for (int k=i-1; k>=0; k--) {
-                float coeff = result[k][i];
-                for (int j=0; j<result.ncol; j++) {
-                    result[k][j] -= result[i][j]*coeff;
-                }
-            }
-        }
-        // cut the identity matrix back
-        Matrix truncate(nrow, ncol);
-        for(int i=0; i<nrow; i++)
-            for(int j=0; j<ncol; j++)
-                truncate[i][j] = result[i][j+ncol];
-        return truncate;
-    }
-
-    friend std::ostream& operator<<(std::ostream& s, Matrix& m);
+    T x,y,z;
 };
 
-inline std::ostream& operator<<(std::ostream& s, Matrix& m) {
-    for (int i = 0; i < m.nrow; i++)  {
-        for (int j = 0; j < m.ncol; j++) {
-            s << m[i][j];
-            if (j<m.ncol-1) s << "\t";
-        }
-        s << "\n";
-    }
-    return s;
+/////////////////////////////////////////////////////////////////////////////////
+
+template<size_t DIM,typename T> T operator*(const vec<DIM,T>& lhs, const vec<DIM,T>& rhs) {
+    T ret = T();
+    for (size_t i=DIM; i--; ret+=lhs[i]*rhs[i]);
+    return ret;
 }
 
 
-template <class T>
-class Polygon2D {
-public:
-    int n;
-    std::vector<Vec2<T>> pt;
-    Polygon2D(int _n, std::vector<Vec2<T>> _pt): n(_n), pt(_pt) {}
+template<size_t DIM,typename T>vec<DIM,T> operator+(vec<DIM,T> lhs, const vec<DIM,T>& rhs) {
+    for (size_t i=DIM; i--; lhs[i]+=rhs[i]);
+    return lhs;
+}
+
+template<size_t DIM,typename T>vec<DIM,T> operator-(vec<DIM,T> lhs, const vec<DIM,T>& rhs) {
+    for (size_t i=DIM; i--; lhs[i]-=rhs[i]);
+    return lhs;
+}
+
+template<size_t DIM,typename T,typename U> vec<DIM,T> operator*(vec<DIM,T> lhs, const U& rhs) {
+    for (size_t i=DIM; i--; lhs[i]*=rhs);
+    return lhs;
+}
+
+template<size_t DIM,typename T,typename U> vec<DIM,T> operator/(vec<DIM,T> lhs, const U& rhs) {
+    for (size_t i=DIM; i--; lhs[i]/=rhs);
+    return lhs;
+}
+
+template<size_t LEN,size_t DIM,typename T> vec<LEN,T> embed(const vec<DIM,T> &v, T fill=1) {
+    vec<LEN,T> ret;
+    for (size_t i=LEN; i--; ret[i]=(i<DIM?v[i]:fill));
+    return ret;
+}
+
+template<size_t LEN,size_t DIM, typename T> vec<LEN,T> proj(const vec<DIM,T> &v) {
+    vec<LEN,T> ret;
+    for (size_t i=LEN; i--; ret[i]=v[i]);
+    return ret;
+}
+
+template <typename T> vec<3,T> cross(vec<3,T> v1, vec<3,T> v2) {
+    return vec<3,T>(v1.y*v2.z - v1.z*v2.y, v1.z*v2.x - v1.x*v2.z, v1.x*v2.y - v1.y*v2.x);
+}
+
+template <size_t DIM, typename T> std::ostream& operator<<(std::ostream& out, vec<DIM,T>& v) {
+    for(unsigned int i=0; i<DIM; i++) {
+        out << v[i] << " " ;
+    }
+    return out ;
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+template<size_t DIM,typename T> struct dt {
+    static T det(const mat<DIM,DIM,T>& src) {
+        T ret=0;
+        for (size_t i=DIM; i--; ret += src[0][i]*src.cofactor(0,i));
+        return ret;
+    }
 };
 
-template <class T>
-class Triangle2D: public Polygon2D<T> {
-public:
-    using Polygon2D<T>::pt;
-    std::vector<T> depth;
-
-    Triangle2D(std::vector<Vec2<T>> _pt, std::vector<Vec2<T>> _depth = {0, 0, 0}):
-        Polygon2D<T>(3, _pt),
-        depth(_depth) {}
-
-    Triangle2D(std::vector<Vec3<float>> _pt):
-        Polygon2D<T>(3, {_pt[0].toVec2(), _pt[1].toVec2(), _pt[2].toVec2()}),
-        depth({_pt[0].z, _pt[1].z, _pt[2].z}) {}
-
-    Vec3f baryCentric(Vec2f P) {
-        Vec3f u = Vec3f(pt[2][0]-pt[0][0], pt[1][0]-pt[0][0], pt[0][0]-P[0])^Vec3f(pt[2][1]-pt[0][1], pt[1][1]-pt[0][1], pt[0][1]-P[1]);
-        /* `pts` and `P` has integer value as coordinates
-           so `abs(u[2])` < 1 means `u[2]` is 0, that means
-           triangle is degenerate, in this case return something with negative coordinates */
-        if (std::abs(u.z)<1) return Vec3f(-1,1,1);
-        return Vec3f(1.f-(u.x+u.y)/u.z, u.y/u.z, u.x/u.z);
-    }
-
-    bool inInside(Vec2i P) {
-        auto bc = baryCentric(P);
-        if (bc.x<0 || bc.y<0 || bc.z<0) return false;
-        return true;
+template<typename T> struct dt<1,T> {
+    static T det(const mat<1,1,T>& src) {
+        return src[0][0];
     }
 };
 
+/////////////////////////////////////////////////////////////////////////////////
 
+template<size_t DimRows,size_t DimCols,typename T> class mat {
+    vec<DimCols,T> rows[DimRows];
+public:
+    mat() {}
 
+    vec<DimCols,T>& operator[] (const size_t idx) {
+        assert(idx<DimRows);
+        return rows[idx];
+    }
 
+    const vec<DimCols,T>& operator[] (const size_t idx) const {
+        assert(idx<DimRows);
+        return rows[idx];
+    }
 
+    vec<DimRows,T> col(const size_t idx) const {
+        assert(idx<DimCols);
+        vec<DimRows,T> ret;
+        for (size_t i=DimRows; i--; ret[i]=rows[i][idx]);
+        return ret;
+    }
+
+    void set_col(size_t idx, vec<DimRows,T> v) {
+        assert(idx<DimCols);
+        for (size_t i=DimRows; i--; rows[i][idx]=v[i]);
+    }
+
+    static mat<DimRows,DimCols,T> identity() {
+        mat<DimRows,DimCols,T> ret;
+        for (size_t i=DimRows; i--; )
+            for (size_t j=DimCols;j--; ret[i][j]=(i==j));
+        return ret;
+    }
+
+    T det() const {
+        return dt<DimCols,T>::det(*this);
+    }
+
+    mat<DimRows-1,DimCols-1,T> get_minor(size_t row, size_t col) const {
+        mat<DimRows-1,DimCols-1,T> ret;
+        for (size_t i=DimRows-1; i--; )
+            for (size_t j=DimCols-1;j--; ret[i][j]=rows[i<row?i:i+1][j<col?j:j+1]);
+        return ret;
+    }
+
+    T cofactor(size_t row, size_t col) const {
+        return get_minor(row,col).det()*((row+col)%2 ? -1 : 1);
+    }
+
+    mat<DimRows,DimCols,T> adjugate() const {
+        mat<DimRows,DimCols,T> ret;
+        for (size_t i=DimRows; i--; )
+            for (size_t j=DimCols; j--; ret[i][j]=cofactor(i,j));
+        return ret;
+    }
+
+    mat<DimRows,DimCols,T> invert_transpose() {
+        mat<DimRows,DimCols,T> ret = adjugate();
+        T tmp = ret[0]*rows[0];
+        return ret/tmp;
+    }
+};
+
+/////////////////////////////////////////////////////////////////////////////////
+
+template<size_t DimRows,size_t DimCols,typename T> vec<DimRows,T> operator*(const mat<DimRows,DimCols,T>& lhs, const vec<DimCols,T>& rhs) {
+    vec<DimRows,T> ret;
+    for (size_t i=DimRows; i--; ret[i]=lhs[i]*rhs);
+    return ret;
+}
+
+template<size_t R1,size_t C1,size_t C2,typename T>mat<R1,C2,T> operator*(const mat<R1,C1,T>& lhs, const mat<C1,C2,T>& rhs) {
+    mat<R1,C2,T> result;
+    for (size_t i=R1; i--; )
+        for (size_t j=C2; j--; result[i][j]=lhs[i]*rhs.col(j));
+    return result;
+}
+
+template<size_t DimRows,size_t DimCols,typename T>mat<DimCols,DimRows,T> operator/(mat<DimRows,DimCols,T> lhs, const T& rhs) {
+    for (size_t i=DimRows; i--; lhs[i]=lhs[i]/rhs);
+    return lhs;
+}
+
+template <size_t DimRows,size_t DimCols,class T> std::ostream& operator<<(std::ostream& out, mat<DimRows,DimCols,T>& m) {
+    for (size_t i=0; i<DimRows; i++) out << m[i] << std::endl;
+    return out;
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+
+typedef vec<2,  float> Vec2f;
+typedef vec<2,  int>   Vec2i;
+typedef vec<3,  float> Vec3f;
+typedef vec<3,  int>   Vec3i;
+typedef vec<4,  float> Vec4f;
+typedef mat<4,4,float> Matrix;
 

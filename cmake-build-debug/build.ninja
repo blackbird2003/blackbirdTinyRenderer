@@ -55,6 +55,12 @@ build CMakeFiles/tinyRender.dir/main.cpp.obj: CXX_COMPILER__tinyRender_Debug D$:
   OBJECT_DIR = CMakeFiles\tinyRender.dir
   OBJECT_FILE_DIR = CMakeFiles\tinyRender.dir
 
+build CMakeFiles/tinyRender.dir/gl.cpp.obj: CXX_COMPILER__tinyRender_Debug D$:/blackbirdTinyRenderer/gl.cpp || cmake_object_order_depends_target_tinyRender
+  DEP_FILE = CMakeFiles\tinyRender.dir\gl.cpp.obj.d
+  FLAGS = -g -fdiagnostics-color=always
+  OBJECT_DIR = CMakeFiles\tinyRender.dir
+  OBJECT_FILE_DIR = CMakeFiles\tinyRender.dir
+
 build CMakeFiles/tinyRender.dir/tgaimage.cpp.obj: CXX_COMPILER__tinyRender_Debug D$:/blackbirdTinyRenderer/tgaimage.cpp || cmake_object_order_depends_target_tinyRender
   DEP_FILE = CMakeFiles\tinyRender.dir\tgaimage.cpp.obj.d
   FLAGS = -g -fdiagnostics-color=always
@@ -67,6 +73,12 @@ build CMakeFiles/tinyRender.dir/model.cpp.obj: CXX_COMPILER__tinyRender_Debug D$
   OBJECT_DIR = CMakeFiles\tinyRender.dir
   OBJECT_FILE_DIR = CMakeFiles\tinyRender.dir
 
+build CMakeFiles/tinyRender.dir/geometry.cpp.obj: CXX_COMPILER__tinyRender_Debug D$:/blackbirdTinyRenderer/geometry.cpp || cmake_object_order_depends_target_tinyRender
+  DEP_FILE = CMakeFiles\tinyRender.dir\geometry.cpp.obj.d
+  FLAGS = -g -fdiagnostics-color=always
+  OBJECT_DIR = CMakeFiles\tinyRender.dir
+  OBJECT_FILE_DIR = CMakeFiles\tinyRender.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target tinyRender
@@ -75,7 +87,7 @@ build CMakeFiles/tinyRender.dir/model.cpp.obj: CXX_COMPILER__tinyRender_Debug D$
 #############################################
 # Link the executable tinyRender.exe
 
-build tinyRender.exe: CXX_EXECUTABLE_LINKER__tinyRender_Debug CMakeFiles/tinyRender.dir/main.cpp.obj CMakeFiles/tinyRender.dir/tgaimage.cpp.obj CMakeFiles/tinyRender.dir/model.cpp.obj
+build tinyRender.exe: CXX_EXECUTABLE_LINKER__tinyRender_Debug CMakeFiles/tinyRender.dir/main.cpp.obj CMakeFiles/tinyRender.dir/gl.cpp.obj CMakeFiles/tinyRender.dir/tgaimage.cpp.obj CMakeFiles/tinyRender.dir/model.cpp.obj CMakeFiles/tinyRender.dir/geometry.cpp.obj
   FLAGS = -g
   LINK_LIBRARIES = -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\tinyRender.dir

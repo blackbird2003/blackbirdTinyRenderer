@@ -4,146 +4,37 @@
 #include "tgaimage.h"
 #include "geometry.h"
 #include "model.h"
-
-//Bresenham
-//Reference: https://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm#C++
-void drawLine(int x1, int y1, int x2, int y2, TGAImage& image, TGAColor color)
-{
-    //Ensure that slope in (0, 1)
-    const bool steep = (std::abs(y2 - y1) > std::abs(x2 - x1));
-    if (steep) {
-        std::swap(x1, y1);
-        std::swap(x2, y2);
-    }
-    if (x1 > x2) {
-        std::swap(x1, x2);
-        std::swap(y1, y2);
-    }
-
-    const float dx = x2 - x1;
-    const float dy = fabs(y2 - y1);
-
-    float error = dx / 2.0f;
-    const int ystep = (y1 < y2) ? 1 : -1;
-    int y = (int)y1;
-
-    const int maxX = (int)x2;
-
-    for (int x = (int)x1; x <= maxX; x++) {
-        if (steep) {
-            image.set(y, x, color);
-        } else {
-            image.set(x, y, color);
-        }
-
-        error -= dy;
-        if (error < 0) {
-            y += ystep;
-            error += dx;
-        }
-    }
-}
+#include "gl.h"
 
 Model *model = NULL;
 const int width  = 800;
-const int height = 800;
-const int depth = 255;
-const TGAColor black = TGAColor(0, 0, 0, 0);
-const TGAColor white = TGAColor(255, 255, 255, 255);
-const TGAColor red = TGAColor(255, 0, 0, 255);
-const TGAColor green = TGAColor(0, 255, 0, 255);
-const TGAColor blue = TGAColor(0, 0, 255, 255);
+const int height = 800;//const int depth = 255; //set as default
 
-//Iterate all points in the rectangular bounding box of triangle, draw if the point is inside
-// 2024 04 26 2d->3d, texture mapping
-void drawSolidTriangle(Triangle2D<float> tri, Vec2i* uv, TGAImage &image, float intensity, int *zbuffer) {
-    Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
-    Vec2f bboxmax(0, 0);
-    Vec2f clamp(image.get_width()-1, image.get_height()-1);
-    for (int i=0; i<3; i++) {
-        bboxmin.x = std::max((float)0, std::min(bboxmin.x, tri.pt[i].x));
-        bboxmin.y = std::max((float)0, std::min(bboxmin.y, tri.pt[i].y));
-        bboxmax.x = std::min(clamp.x, std::max(bboxmax.x, tri.pt[i].x));
-        bboxmax.y = std::min(clamp.y, std::max(bboxmax.y, tri.pt[i].y));
-    }
-
-    Vec3i P;
-    for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
-        for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
-            Vec3f bc  = tri.baryCentric(Vec2f(P.x, P.y));//toTriangle2D().baryCentric(P);
-            if (bc.x<0 || bc.y<0 || bc.z<0) continue;
-
-            P.z = tri.depth[0] * bc.x + tri.depth[1] * bc.y + tri.depth[2] * bc.z;
-
-            int idx = P.x + P.y * width;
-            if (P.z > zbuffer[idx]) {
-                zbuffer[idx] = P.z;
-                Vec2i P_uv = uv[0] * bc.x + uv[1] * bc.y + uv[2] * bc.z;
-                TGAColor color = model->diffuse(P_uv);
-                image.set(P.x, P.y, color);
-            }
-        }
-    }
-}
-
-//Transition between coordinates (vector type) and homogeneous coordinates (matrix type)
-Matrix v2hc(const Vec3f &v) {
-    Matrix hc(4, 1);
-    hc[0][0] = v.x;
-    hc[1][0] = v.y;
-    hc[2][0] = v.z;
-    hc[3][0] = 1;
-    return hc;
-}
-Vec3f hc2v(const Matrix &hc) {
-    return Vec3f(hc[0][0], hc[1][0], hc[2][0]) * (1.f / hc[3][0]);
-}
-
-
-
-Vec3f light_dir = Vec3f(0, 0, -1).normalize();
-Vec3f eye(1, 1, 3);
+Vec3f light_dir = Vec3f(1, 1, 1).normalize();
+Vec3f eye(0, -1, 3);
 Vec3f center(0, 0, 0);
 Vec3f up(0, 1, 0);
-//Vec3f camera(0, 0, 3);
 
-//screen_coordinate = viewport * projection * modelview * world_coordinate
-Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
-    Vec3f z = (eye - center).normalize();
-    Vec3f x = (up ^ z).normalize();
-    Vec3f y = (z ^ x).normalize();
-    Matrix M_inv = Matrix::identity(4);
-    Matrix T = Matrix::identity(4);
-    //thanks https://www.zhihu.com/question/447781866
-    for (int i = 0; i < 3; i++) {
-        M_inv[0][i] = x[i];
-        M_inv[1][i] = y[i];
-        M_inv[2][i] = z[i];
-        T[i][3] = -eye[i];
+Matrix ModelView;
+Matrix Projection;
+Matrix Viewport;
+
+struct GouraudShader : public IShader {
+    Vec3f varying_intensity;
+    //顶点着色
+    virtual Vec4f vertex(int iface, int nthvert) {
+        Vec4f glVertex = embed<4>(model->vert(iface, nthvert));
+        glVertex = Viewport * Projection * ModelView * glVertex;
+        varying_intensity[nthvert] = std::max(0.f, model->normal(iface, nthvert) * light_dir);
+        return glVertex;
     }
-    return M_inv * T;
-}
-
-
-Matrix projection(Vec3f eye, Vec3f center) {
-    Matrix m = Matrix::identity(4);
-    m[3][2] = -1.f / (eye - center).norm();
-    //m[3][2] = -1.f / camera.z;
-    return m;
-}
-
-Matrix viewport(int x, int y, int w, int h) {
-    Matrix m = Matrix::identity(4);
-    //Translation
-    m[0][3] = x + w / 2.f;
-    m[1][3] = y + h / 2.f;
-    m[2][3] = depth / 2.f;
-    //scale to [0, 1]
-    m[0][0] = w / 2.f;
-    m[1][1] = h / 2.f;
-    m[2][2] = depth / 2.f;
-    return m;
-}
+    //片段着色 用于drawTrianglw
+    virtual bool fragment(Vec3f bar, TGAColor &color) {
+        float intensity = varying_intensity * bar;
+        color = TGAColor(255, 255, 255) * intensity;
+        return false;
+    }
+};
 
 int main(int argc, char** argv) {
     if (2==argc) {
@@ -152,57 +43,35 @@ int main(int argc, char** argv) {
         model = new Model("obj/african_head.obj");
     }
 
-    //Initialize Z-Buffer
-    //    float *zbuffer = new float[width * height];
-    //    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
-    int *zbuffer = new int[width * height];
-    for (int i = 0; i < width*height; i++) {
-        zbuffer[i] = std::numeric_limits<int>::min();
-    }
-
     TGAImage image(width, height, TGAImage::RGB);
+    TGAImage zbuffer(width, height, TGAImage::GRAYSCALE);
+
+    lookat(eye, center, up);
+    viewport(width/8, height/8, width*3/4, height*3/4);
+    projection(eye, center);
+    light_dir.normalize();
+
+    GouraudShader shader;
 
     int cnt = 0;
-
-    Matrix modelviewMatrix = lookat(eye, center, up);
-    Matrix projectionMatrix = projection(eye, center);
-    Matrix viewportMatrix = viewport(width / 8, height / 8, width * 0.75, height * 0.75);
-
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
-        Vec3f screen_coords[3];
         Vec3f world_coords[3];
-        for (int j=0; j<3; j++) {
+        Vec4f screen_coords[3];
+        for (int j = 0; j < 3; j++) {
             Vec3f v = model->vert(face[j]);
-            //screen_coords[j] = Vec2i((v.x+1.)*width/2., (v.y+1.)*height/2.);
-
-            //world -> screen:
-            //3d coordinate -> homogeneous coordinates
-            //-> modelview trans (into camera coordinate, camera at eyepos, point to center, with up direction)
-            //-> projection trans (camera at (0, 0, 1) project to z = 0)
-            //-> viewport trans(to make center at (w/2,h/2,d/2))
-
-            world_coords[j]  = v;
-            screen_coords[j] = hc2v(viewportMatrix * projectionMatrix * modelviewMatrix * v2hc(v));
+            world_coords[j] = v;
+            screen_coords[j] = shader.vertex(i, j);
         }
-
-        //Still simplified light intensity
-        Vec3f n = (world_coords[2]-world_coords[0])^(world_coords[1]-world_coords[0]);
-        n.normalize();
-        float intensity = n*light_dir;
-
-        if (intensity>0) {
-            printf("ok %d\n", ++cnt);
-            Vec2i uv[3];
-            for (int j = 0; j < 3; j++) uv[j] = model->uv(i, j);
-            drawSolidTriangle(Triangle2D<float>({screen_coords[0], screen_coords[1], screen_coords[2]}), uv, image, intensity, zbuffer);
-        }
+        drawTriangle(screen_coords, shader, image, zbuffer);
+        printf("%d ok\n", ++cnt);
     }
 
     image.flip_vertically();
+    zbuffer.flip_vertically();
     image.write_tga_file("output.tga");
+    zbuffer.write_tga_file("zbuffer.tga");
     delete model;
-    delete[] zbuffer;
     return 0;
 }
 

@@ -1,12 +1,16 @@
-## TinyRender学习笔记
+## BlackbirdRender
 
 通过手写软光栅渲染器加深对计算机图形学基本原理的理解，并练习C++面向对象程序设计。
 
-该项目主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写，使用CMake构建
-
-可以浏览我的历史commit，找到不同进度时提交的代码。
+主要参考[Home · ssloy/tinyrenderer Wiki (github.com)](https://github.com/ssloy/tinyrenderer/wiki)编写，使用CMake构建
 
 本项目涉及的几乎所有的图形学知识都在GAMES101课程中出现过，推荐将GAMES101作为前置课程，或配合GAMES101的进度一起学习。
+
+目前已添加QT GUI
+
+![屏幕截图 2024-06-15 190047](https://img2023.cnblogs.com/blog/1928276/202406/1928276-20240615183438918-1030934739.png)
+
+
 
 ## Lesson 0 Getting Started
 

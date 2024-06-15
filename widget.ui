@@ -131,7 +131,7 @@
     <string>Eye pos(x/y/z):</string>
    </property>
   </widget>
-  <widget class="QComboBox" name="cboxModels">
+  <widget class="QComboBox" name="cboxModel">
    <property name="geometry">
     <rect>
      <x>0</x>

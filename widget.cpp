@@ -286,3 +286,14 @@ void Widget::on_cboxModels_currentIndexChanged(int index)
     updateImg();
 }
 
+
+void Widget::on_cboxModel_currentIndexChanged(int index)
+{
+    qDebug() << "cboxModel" << index;
+    if (index == 0) model = &model0;
+    if (index == 1) model = &model1;
+    if (index == 2) model = &model2;
+    Render(model, shader);
+    updateImg();
+}
+

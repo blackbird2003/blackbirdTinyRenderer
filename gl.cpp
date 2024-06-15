@@ -1,4 +1,7 @@
 #include "gl.h"
+#include "widget.h"
+
+
 
 //Bresenham
 //Reference: https://rosettacode.org/wiki/Bitmap/Bresenham%27s_line_algorithm#C++
@@ -135,7 +138,7 @@ template<size_t LEN,size_t DIM, typename T> vec<LEN,T> proj(const vec<DIM,T> &v)
 */
 
 
-void drawTriangle(Vec4f tri[3], IShader &shader,
+void drawTriangle(Vec4f tri[3], IShader *shader,
                   TGAImage &image, TGAImage &zbuffer) {
     //here pts is screen coords
 //    Vec2f bboxmin(image.get_width()-1,  image.get_height()-1);
@@ -172,11 +175,11 @@ void drawTriangle(Vec4f tri[3], IShader &shader,
             float z = tri[0][2] * bc.x + tri[1][2] * bc.y + tri[2][2] * bc.z;
             float w = tri[0][3] * bc.x + tri[1][3] * bc.y + tri[2][3] * bc.z;
             int frag_depth = std::max(0, std::min(255, int(z/w+.5)));
-            //zbuffer.get虽然是TGA Color类型，但作为zbuffer时不表示color，而是深度etc，习惯就好
+            //zbuffer.get虽然是TGA Color类型，但作为zbuffer时不表示color，而是深度etc
             if (bc.x < 0 || bc.y < 0 || bc.z < 0 || frag_depth < zbuffer.get(P.x, P.y)[0])
                 continue;
             TGAColor color;
-            bool discard = shader.fragment(bc, color);
+            bool discard = shader->fragment(bc, color);
             if (!discard) {
                 zbuffer.set(P.x, P.y, TGAColor(frag_depth));
                 image.set(P.x, P.y, color);
@@ -212,3 +215,8 @@ void drawTriangle(Vec4f tri[3], IShader &shader,
 //    }
 //}
 //
+
+
+
+
+

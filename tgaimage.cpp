@@ -6,10 +6,7 @@
 #include "tgaimage.h"
 
 TGAImage::TGAImage() : data(NULL), width(0), height(0), bytespp(0) {
-<<<<<<< HEAD
-=======
 
->>>>>>> 2eca32a (implement QT GUI)
 }
 
 TGAImage::TGAImage(int w, int h, int bpp) : data(NULL), width(w), height(h), bytespp(bpp) {

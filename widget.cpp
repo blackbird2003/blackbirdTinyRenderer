@@ -53,8 +53,8 @@ void Render(Model *model, IShader *shader) {
         //printf("%d ok\n", ++cnt);
     }
 
-    //image.flip_vertically();
-    //zbuffer.flip_vertically();
+    // image.flip_vertically();
+    // zbuffer.flip_vertically();
     bool okwrite = image.write_tga_file("output.tga");
     qDebug() << "okwrite" << okwrite;
     zbuffer.write_tga_file("zbuffer.tga");
